@@ -1,0 +1,32 @@
+flex-version = flex
+support-for-ie = false
+vendor-prefixes = official
+@require '../../node_modules/nib/index.styl'
+@require 'variables'
+@require 'vendor/*'
+
+global-reset()
+reset-html5()
+
+*
+  box-sizing border-box
+
+html, body, #app
+  background var(--app-fg)
+  width 100%
+  width 100vw
+
+a
+  color var(--link)
+  text-decoration none
+
+  &:hover
+    color var(--hover)
+
+#app
+  df()
+  color var(--txt)
+  padding-top 3rem
+
+.ni-field
+  border-radius 2px!important
