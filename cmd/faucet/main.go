@@ -1,0 +1,95 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"net/http"
+	"strings"
+
+	log "github.com/sirupsen/logrus"
+
+	"faucet/cosmosfaucet"
+
+	"faucet/cmd/config"
+
+	"github.com/ignite/cli/ignite/pkg/chaincmd"
+	chaincmdrunner "github.com/ignite/cli/ignite/pkg/chaincmd/runner"
+	"github.com/ignite/cli/ignite/pkg/cosmosver"
+)
+
+func main() {
+	flag.Parse()
+
+	configuration, err := config.NewConfig()
+	err = configuration.LoadConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	configKeyringBackend, err := chaincmd.KeyringBackendFromString(keyringBackend)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ccoptions := []chaincmd.Option{
+		chaincmd.WithKeyringPassword(keyringPassword),
+		chaincmd.WithKeyringBackend(configKeyringBackend),
+		chaincmd.WithAutoChainIDDetection(),
+		chaincmd.WithNodeAddress(nodeAddress),
+	}
+
+	if home != "" {
+		ccoptions = append(ccoptions, chaincmd.WithHome(home))
+	}
+
+	if legacySendCmd {
+		ccoptions = append(ccoptions, chaincmd.WithLegacySendCommand())
+	}
+
+	switch sdkVersion {
+	case "stargate-44":
+		ccoptions = append(ccoptions,
+			chaincmd.WithVersion(cosmosver.StargateFortyFourVersion),
+		)
+	case "stargate-40":
+		ccoptions = append(ccoptions,
+			chaincmd.WithVersion(cosmosver.StargateFortyVersion),
+		)
+	case "launchpad":
+		ccoptions = append(ccoptions,
+			chaincmd.WithVersion(cosmosver.MaxLaunchpadVersion),
+			chaincmd.WithLaunchpadCLI(appCli),
+		)
+		if home != "" {
+			ccoptions = append(ccoptions, chaincmd.WithLaunchpadCLIHome(home))
+		}
+	default:
+		ccoptions = append(ccoptions,
+			chaincmd.WithVersion(cosmosver.Latest),
+		)
+	}
+
+	cr, err := chaincmdrunner.New(context.Background(), chaincmd.New(appCli, ccoptions...))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	coins := strings.Split(defaultDenoms, denomSeparator)
+
+	faucetOptions := make([]cosmosfaucet.Option, len(coins))
+	for i, coin := range coins {
+		faucetOptions[i] = cosmosfaucet.Coin(creditAmount, maxCredit, coin)
+	}
+
+	faucetOptions = append(faucetOptions, cosmosfaucet.Account(keyName, keyMnemonic, coinType))
+
+	faucet, err := cosmosfaucet.New(context.Background(), cr, configuration, faucetOptions...)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	http.HandleFunc("/", faucet.ServeHTTP)
+	log.Infof("listening on :%d", port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
+}
